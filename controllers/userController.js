@@ -1,4 +1,6 @@
+// ...existing code...
 const userModel = require('../models/user');
+const crypto = require('crypto');
 
 function list(req, res) {
     userModel.getAll(function (err, users) {
@@ -6,16 +8,16 @@ function list(req, res) {
             req.flash('error', err.message || err);
             return res.status(500).redirect('/');
         }
-        // render a users list view if you have one, otherwise return JSON
-        if (req.accepts('html')) {
-            return res.render('users', { users, user: req.session.user });
-        }
-        return res.json(users);
+        return res.render('users', { users, user: req.session.user, messages: req.flash() });
     });
 }
 
 function getById(req, res) {
     const id = parseInt(req.params.id, 10);
+    if (!id) {
+        req.flash('error', 'Invalid user id');
+        return res.redirect('/users');
+    }
     userModel.getById(id, function (err, userData) {
         if (err) {
             req.flash('error', err.message || err);
@@ -23,20 +25,21 @@ function getById(req, res) {
         }
         if (!userData) {
             req.flash('error', 'User not found');
-            return res.status(404).redirect('/users');
+            return res.redirect('/users');
         }
-        if (req.accepts('html')) {
-            return res.render('editUser', { userData, user: req.session.user });
-        }
-        return res.json(userData);
+        return res.render('editUser', { userData, user: req.session.user, messages: req.flash() });
     });
+}
+
+function renderAdd(req, res) {
+    return res.render('addUser', { user: req.session.user, messages: req.flash() });
 }
 
 function add(req, res) {
     const newUser = {
-        username: req.body.username,
-        email: req.body.email,
-        password: req.body.password, // caller/controller may hash before storing if desired
+        username: (req.body.username || '').trim(),
+        email: (req.body.email || '').trim(),
+        password: req.body.password,
         address: req.body.address || null,
         contact: req.body.contact || null,
         role: req.body.role || 'user'
@@ -44,26 +47,34 @@ function add(req, res) {
 
     if (!newUser.username || !newUser.email || !newUser.password) {
         req.flash('error', 'username, email and password are required');
-        return res.redirect('/register');
+        return res.redirect('/users/add');
     }
 
-    userModel.add(newUser, function (err, created) {
+    // hash password with SHA1 to match existing login scheme
+    newUser.password = crypto.createHash('sha1').update(newUser.password).digest('hex');
+
+    userModel.add(newUser, function (err) {
         if (err) {
             req.flash('error', err.message || err);
-            return res.status(500).redirect('/register');
+            return res.redirect('/users/add');
         }
-        // redirect to users list (admin) or login flow
-        return res.redirect('/login');
+        req.flash('success', 'User created');
+        return res.redirect('/users');
     });
 }
 
 function update(req, res) {
     const id = parseInt(req.params.id, 10);
+    if (!id) {
+        req.flash('error', 'Invalid user id');
+        return res.redirect('/users');
+    }
+
     const updated = {
-        username: req.body.username,
-        email: req.body.email,
+        username: (req.body.username || '').trim(),
+        email: (req.body.email || '').trim(),
         // only set password if provided
-        password: req.body.password ? req.body.password : undefined,
+        password: req.body.password ? crypto.createHash('sha1').update(req.body.password).digest('hex') : undefined,
         address: req.body.address || null,
         contact: req.body.contact || null,
         role: req.body.role || 'user'
@@ -72,27 +83,33 @@ function update(req, res) {
     userModel.update(id, updated, function (err, result) {
         if (err) {
             req.flash('error', err.message || err);
-            return res.status(500).redirect('/users');
+            return res.redirect('/users');
         }
         if (!result || result.affectedRows === 0) {
             req.flash('error', 'User not found or no changes made');
-            return res.status(404).redirect('/users');
+            return res.redirect('/users');
         }
+        req.flash('success', 'User updated');
         return res.redirect('/users');
     });
 }
 
 function remove(req, res) {
     const id = parseInt(req.params.id, 10);
+    if (!id) {
+        req.flash('error', 'Invalid user id');
+        return res.redirect('/users');
+    }
     userModel.delete(id, function (err, result) {
         if (err) {
             req.flash('error', err.message || err);
-            return res.status(500).redirect('/users');
+            return res.redirect('/users');
         }
         if (!result || result.affectedRows === 0) {
             req.flash('error', 'User not found');
-            return res.status(404).redirect('/users');
+            return res.redirect('/users');
         }
+        req.flash('success', 'User deleted');
         return res.redirect('/users');
     });
 }
@@ -100,7 +117,9 @@ function remove(req, res) {
 module.exports = {
     list,
     getById,
+    renderAdd,
     add,
     update,
     delete: remove
 };
+// ...existing code...

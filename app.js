@@ -1,3 +1,4 @@
+// ...existing code...
 const express = require('express');
 const session = require('express-session');
 const flash = require('connect-flash');
@@ -49,21 +50,25 @@ const checkAdmin = (req, res, next) => {
 // Routes
 app.get('/', (req, res) => res.render('index', { user: req.session.user }));
 
-// Products listing: use productController to fetch and render
+// product routes
 app.get('/inventory', checkAuthenticated, checkAdmin, productController.list);
 app.get('/shopping', checkAuthenticated, productController.list);
+app.get('/product/:id', checkAuthenticated, productController.getById);
+app.get('/addProduct', checkAuthenticated, checkAdmin, (req, res) => res.render('addProduct', { user: req.session.user }));
+app.post('/addProduct', checkAuthenticated, checkAdmin, upload.single('image'), productController.add);
+app.get('/updateProduct/:id', checkAuthenticated, checkAdmin, productController.renderEdit);
+app.post('/updateProduct/:id', checkAuthenticated, checkAdmin, upload.single('image'), productController.update);
+app.get('/deleteProduct/:id', checkAuthenticated, checkAdmin, productController.delete);
 
-// Registration routes -> delegate to userController.add
+// user registration / login (login kept in app.js)
 app.get('/register', (req, res) => {
     res.render('register', { messages: req.flash('error'), formData: req.flash('formData')[0] });
 });
 app.post('/register', (req, res, next) => userController.add(req, res, next));
 
-// Login (kept here because login flow was previously in app.js)
 app.get('/login', (req, res) => {
     res.render('login', { messages: req.flash('success'), errors: req.flash('error') });
 });
-
 app.post('/login', (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -88,7 +93,15 @@ app.post('/login', (req, res) => {
     });
 });
 
-// Cart routes -> delegate to cartController
+// admin user management routes
+app.get('/users', checkAuthenticated, checkAdmin, userController.list);
+app.get('/users/add', checkAuthenticated, checkAdmin, userController.renderAdd);
+app.post('/users/add', checkAuthenticated, checkAdmin, userController.add);
+app.get('/users/:id', checkAuthenticated, checkAdmin, userController.getById);
+app.post('/users/:id', checkAuthenticated, checkAdmin, userController.update);
+app.get('/users/delete/:id', checkAuthenticated, checkAdmin, userController.delete);
+
+// cart routes
 app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => cartController.addToCart(req, res));
 app.get('/cart', checkAuthenticated, (req, res) => cartController.viewCart(req, res));
 app.post('/cart/remove/:id', checkAuthenticated, (req, res) => cartController.removeFromCart(req, res));
@@ -99,15 +112,7 @@ app.get('/logout', (req, res) => {
     req.session.destroy(() => res.redirect('/'));
 });
 
-// product page and product CRUD using controller
-app.get('/product/:id', checkAuthenticated, productController.getById);
-app.get('/addProduct', checkAuthenticated, checkAdmin, (req, res) => res.render('addProduct', { user: req.session.user }));
-app.post('/addProduct', checkAuthenticated, checkAdmin, upload.single('image'), productController.add);
-app.get('/updateProduct/:id', checkAuthenticated, checkAdmin, productController.renderEdit);
-app.post('/updateProduct/:id', checkAuthenticated, checkAdmin, upload.single('image'), productController.update);
-// delete product
-app.get('/deleteProduct/:id', checkAuthenticated, checkAdmin, productController.delete);
-
 // start
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// ...existing code...

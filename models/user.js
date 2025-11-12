@@ -1,10 +1,11 @@
+// ...existing code...
 const db = require('../db');
 
 function getAll(callback) {
     const sql = 'SELECT id, username, email, address, contact, role FROM users';
     db.query(sql, function (err, results) {
         if (err) return callback(err);
-        callback(null, results);
+        return callback(null, results);
     });
 }
 
@@ -12,7 +13,7 @@ function getById(id, callback) {
     const sql = 'SELECT id, username, email, address, contact, role FROM users WHERE id = ?';
     db.query(sql, [id], function (err, results) {
         if (err) return callback(err);
-        callback(null, results[0] || null);
+        return callback(null, results[0] || null);
     });
 }
 
@@ -21,19 +22,19 @@ function add(user, callback) {
     const params = [
         user.username,
         user.email,
-        user.password, // assume caller hashes password when needed
+        user.password,
         user.address || null,
         user.contact || null,
         user.role || 'user'
     ];
     db.query(sql, params, function (err, results) {
         if (err) return callback(err);
-        callback(null, { id: results.insertId, ...user });
+        return callback(null, { id: results.insertId, ...user });
     });
 }
 
 function update(id, user, callback) {
-    // If password present, update it; otherwise keep current password by not changing that column.
+    // If password present (not undefined), update it; otherwise do not update password column
     if (typeof user.password !== 'undefined' && user.password !== null) {
         const sql = 'UPDATE users SET username = ?, email = ?, password = ?, address = ?, contact = ?, role = ? WHERE id = ?';
         const params = [
@@ -47,7 +48,7 @@ function update(id, user, callback) {
         ];
         db.query(sql, params, function (err, results) {
             if (err) return callback(err);
-            callback(null, { affectedRows: results.affectedRows, changedRows: results.changedRows });
+            return callback(null, { affectedRows: results.affectedRows, changedRows: results.changedRows });
         });
     } else {
         const sql = 'UPDATE users SET username = ?, email = ?, address = ?, contact = ?, role = ? WHERE id = ?';
@@ -61,7 +62,7 @@ function update(id, user, callback) {
         ];
         db.query(sql, params, function (err, results) {
             if (err) return callback(err);
-            callback(null, { affectedRows: results.affectedRows, changedRows: results.changedRows });
+            return callback(null, { affectedRows: results.affectedRows, changedRows: results.changedRows });
         });
     }
 }
@@ -70,7 +71,7 @@ function remove(id, callback) {
     const sql = 'DELETE FROM users WHERE id = ?';
     db.query(sql, [id], function (err, results) {
         if (err) return callback(err);
-        callback(null, { affectedRows: results.affectedRows });
+        return callback(null, { affectedRows: results.affectedRows });
     });
 }
 
@@ -81,3 +82,4 @@ module.exports = {
     update,
     delete: remove
 };
+// ...existing code...
