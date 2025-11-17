@@ -1,3 +1,4 @@
+// ...existing code...
 const productModel = require('../models/product');
 
 function ensureCart(req) {
@@ -5,24 +6,17 @@ function ensureCart(req) {
     return req.session.cart;
 }
 
-/**
- * Render cart page with items and total price.
- */
 function viewCart(req, res) {
     try {
         const cart = ensureCart(req);
         const total = cart.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
-        res.render('cart', { cart, total: total.toFixed(2), user: req.session.user, messages: req.flash() });
+        return res.render('cart', { cart, total: total.toFixed(2), user: req.session.user, messages: req.flash() });
     } catch (err) {
         req.flash('error', err.message || 'Unable to load cart');
         return res.redirect('/shopping');
     }
 }
 
-/**
- * Add product to cart. Expects :id param and body.quantity (optional).
- * Uses productModel.getById to fetch product details.
- */
 function addToCart(req, res) {
     const productId = parseInt(req.params.id, 10);
     const qty = Math.max(1, parseInt(req.body.quantity, 10) || 1);
@@ -61,9 +55,39 @@ function addToCart(req, res) {
     });
 }
 
-/**
- * Remove a single product from cart by productId (param :id)
- */
+function updateQuantity(req, res) {
+    const productId = parseInt(req.params.id, 10);
+    let qty = parseInt(req.body.quantity, 10);
+
+    if (!productId || productId <= 0 || isNaN(qty)) {
+        req.flash('error', 'Invalid request');
+        return res.redirect('/cart');
+    }
+
+    qty = Math.max(0, qty);
+
+    try {
+        const cart = ensureCart(req);
+        const idx = cart.findIndex(i => Number(i.productId) === productId);
+        if (idx === -1) {
+            req.flash('error', 'Item not found in cart');
+            return res.redirect('/cart');
+        }
+
+        if (qty === 0) {
+            cart.splice(idx, 1);
+            req.flash('success', 'Item removed from cart');
+        } else {
+            cart[idx].quantity = qty;
+            req.flash('success', 'Quantity updated');
+        }
+        return res.redirect('/cart');
+    } catch (err) {
+        req.flash('error', err.message || 'Unable to update cart');
+        return res.redirect('/cart');
+    }
+}
+
 function removeFromCart(req, res) {
     const productId = parseInt(req.params.id, 10);
     if (!productId || productId <= 0) {
@@ -87,9 +111,6 @@ function removeFromCart(req, res) {
     }
 }
 
-/**
- * Clear entire cart
- */
 function clearCart(req, res) {
     try {
         req.session.cart = [];
@@ -104,6 +125,8 @@ function clearCart(req, res) {
 module.exports = {
     viewCart,
     addToCart,
+    updateQuantity,
     removeFromCart,
     clearCart
 };
+// ...existing code...

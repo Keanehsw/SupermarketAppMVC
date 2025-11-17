@@ -11,7 +11,6 @@ const cartController = require('./controllers/cartController');
 const db = require('./db');
 const app = express();
 
-// Set up multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, 'public/images');
@@ -22,7 +21,6 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// view engine, static, body parser
 app.set('view engine', 'ejs');
 app.use(express.static('public'));
 app.use(express.urlencoded({ extended: false }));
@@ -35,16 +33,15 @@ app.use(session({
 }));
 app.use(flash());
 
-// auth middlewares
 const checkAuthenticated = (req, res, next) => {
     if (req.session.user) return next();
     req.flash('error', 'Please log in to view this resource');
-    res.redirect('/login');
+    return res.redirect('/login');
 };
 const checkAdmin = (req, res, next) => {
     if (req.session.user && req.session.user.role === 'admin') return next();
     req.flash('error', 'Access denied');
-    res.redirect('/shopping');
+    return res.redirect('/shopping');
 };
 
 // Routes
@@ -104,6 +101,7 @@ app.get('/users/delete/:id', checkAuthenticated, checkAdmin, userController.dele
 // cart routes
 app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => cartController.addToCart(req, res));
 app.get('/cart', checkAuthenticated, (req, res) => cartController.viewCart(req, res));
+app.post('/cart/update/:id', checkAuthenticated, (req, res) => cartController.updateQuantity(req, res));
 app.post('/cart/remove/:id', checkAuthenticated, (req, res) => cartController.removeFromCart(req, res));
 app.post('/cart/clear', checkAuthenticated, (req, res) => cartController.clearCart(req, res));
 
