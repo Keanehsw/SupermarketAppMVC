@@ -2,11 +2,12 @@
 const orderModel = require('../models/order');
 const orderItemModel = require('../models/orderitem');
 const productModel = require('../models/product');
+const cartModel = require('../models/cartitem'); // used to clear persisted cart
 
 function renderCheckout(req, res) {
     const cart = req.session.cart || [];
     const total = cart.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 0), 0);
-    res.render('checkout', { cart, total: total.toFixed(2), user: req.session.user, messages: req.flash() });
+    return res.render('checkout', { cart, total: total.toFixed(2), user: req.session.user, messages: req.flash() });
 }
 
 function placeOrder(req, res) {
@@ -22,30 +23,30 @@ function placeOrder(req, res) {
         return res.redirect('/cart');
     }
 
-    // Step 1: fetch latest product info for each cart item and check stock
+    // validate stock sequentially
     const items = [];
     let i = 0;
 
-    function fetchNext() {
-        if (i >= cart.length) return onAllFetched();
+    function checkNext() {
+        if (i >= cart.length) return createOrder();
         const ci = cart[i++];
         productModel.getById(Number(ci.productId), (err, product) => {
             if (err) {
-                req.flash('error', err.message || 'DB error checking product stock');
+                req.flash('error', 'Database error while validating stock');
                 return res.redirect('/cart');
             }
             if (!product) {
-                req.flash('error', `Product not found: id ${ci.productId}`);
+                req.flash('error', `Product not found (id ${ci.productId})`);
                 return res.redirect('/cart');
             }
             const available = Number(product.quantity) || 0;
             const want = Number(ci.quantity) || 0;
-            if (available <= 0) {
-                req.flash('error', `${product.ProductName || 'Product'} is out of stock`);
+            if (want <= 0) {
+                req.flash('error', `Invalid quantity for "${product.ProductName}"`);
                 return res.redirect('/cart');
             }
-            if (want > available) {
-                req.flash('error', `Only ${available} "${product.ProductName}" available. Please update your cart.`);
+            if (available < want) {
+                req.flash('error', `Only ${available} item(s) available for "${product.ProductName}". Please update your cart.`);
                 return res.redirect('/cart');
             }
             items.push({
@@ -53,61 +54,63 @@ function placeOrder(req, res) {
                 quantity: want,
                 price: Number(product.price) || 0
             });
-            fetchNext();
+            checkNext();
         });
     }
 
-    function onAllFetched() {
-        // Step 2: create order
+    function createOrder() {
         const total = items.reduce((s, it) => s + it.price * it.quantity, 0);
         orderModel.create(user.id, total, 'pending', (err, created) => {
             if (err) {
-                req.flash('error', err.message || 'Unable to create order');
+                req.flash('error', 'Unable to create order');
                 return res.redirect('/cart');
             }
             const orderId = created.id;
-            // Step 3: create order items (bulk insert)
+
             const orderItems = items.map(it => ({
                 productId: it.product.id,
                 quantity: it.quantity,
                 price: it.price
             }));
+
             orderItemModel.addMany(orderId, orderItems, (err2) => {
                 if (err2) {
-                    req.flash('error', err2.message || 'Unable to create order items');
+                    req.flash('error', 'Unable to save order items');
                     return res.redirect('/cart');
                 }
-                // Step 4: decrement product stock sequentially
+
+                // decrement stock sequentially
                 let j = 0;
                 function decNext() {
-                    if (j >= items.length) {
-                        // done: clear cart and redirect to order page
-                        req.session.cart = [];
-                        req.flash('success', 'Order placed successfully.');
-                        return res.redirect(`/orders/${orderId}`);
-                    }
+                    if (j >= items.length) return finalize();
                     const it = items[j++];
-                    const newQty = Math.max(0, Number(it.product.quantity) - Number(it.quantity));
-                    const updateObj = {
-                        ProductName: it.product.ProductName,
-                        quantity: newQty,
-                        price: it.product.price,
-                        image: it.product.image
-                    };
-                    productModel.update(it.product.id, updateObj, (upErr) => {
-                        if (upErr) {
-                            // log and continue; but inform admin later
-                            console.error('Failed to decrement stock for product', it.product.id, upErr);
-                        }
+                    productModel.decrementStock(it.product.id, it.quantity, (decErr) => {
+                        if (decErr) console.error('Failed to decrement stock', it.product.id, decErr);
                         decNext();
                     });
                 }
+
+                function finalize() {
+                    // clear session cart and persisted cart
+                    req.session.cart = [];
+                    if (user && user.id) {
+                        cartModel.clearCartForUser(user.id, (clearErr) => {
+                            if (clearErr) console.error('Failed to clear persisted cart after order', clearErr);
+                            req.flash('success', 'Order placed successfully.');
+                            return res.redirect(`/orders/${orderId}`);
+                        });
+                    } else {
+                        req.flash('success', 'Order placed successfully.');
+                        return res.redirect(`/orders/${orderId}`);
+                    }
+                }
+
                 decNext();
             });
         });
     }
 
-    fetchNext();
+    checkNext();
 }
 
 function listOrders(req, res) {
@@ -122,7 +125,7 @@ function listOrders(req, res) {
                 req.flash('error', err.message || err);
                 return res.redirect('/');
             }
-            return res.render('orders', { orders, user, messages: req.flash() });
+            return res.render('orders', { orders: orders || [], user, messages: req.flash() });
         });
     } else {
         orderModel.getByUserId(user.id, (err, orders) => {
@@ -130,7 +133,7 @@ function listOrders(req, res) {
                 req.flash('error', err.message || err);
                 return res.redirect('/');
             }
-            return res.render('orders', { orders, user, messages: req.flash() });
+            return res.render('orders', { orders: orders || [], user, messages: req.flash() });
         });
     }
 }
@@ -161,7 +164,8 @@ function getOrder(req, res) {
                 req.flash('error', err2.message || err2);
                 return res.redirect('/orders');
             }
-            return res.render('orders', { order, items, user, messages: req.flash() });
+            // Render single order view
+            return res.render('order', { order: order, items: items || [], user, messages: req.flash() });
         });
     });
 }
