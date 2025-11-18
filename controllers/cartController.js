@@ -6,6 +6,9 @@ function ensureCart(req) {
     return req.session.cart;
 }
 
+/**
+ * Render cart page with items and total price.
+ */
 function viewCart(req, res) {
     try {
         const cart = ensureCart(req);
@@ -17,9 +20,12 @@ function viewCart(req, res) {
     }
 }
 
+/**
+ * Add product to cart with stock checking.
+ */
 function addToCart(req, res) {
     const productId = parseInt(req.params.id, 10);
-    const qty = Math.max(1, parseInt(req.body.quantity, 10) || 1);
+    const requestedQty = Math.max(1, parseInt(req.body.quantity, 10) || 1);
 
     if (!productId || productId <= 0) {
         req.flash('error', 'Invalid product id');
@@ -36,16 +42,48 @@ function addToCart(req, res) {
             return res.redirect('/shopping');
         }
 
+        const available = Number(product.quantity) || 0;
         const cart = ensureCart(req);
         const existing = cart.find(i => Number(i.productId) === Number(product.id));
+        const existingQty = existing ? Number(existing.quantity) : 0;
+        const maxCanAdd = Math.max(0, available - existingQty);
+
+        if (available <= 0) {
+            req.flash('error', `${product.ProductName || 'Product'} is out of stock`);
+            return res.redirect('/shopping');
+        }
+
+        if (maxCanAdd <= 0) {
+            req.flash('error', `Only ${available} item(s) available for "${product.ProductName}". You already have ${existingQty} in your cart.`);
+            return res.redirect('/shopping');
+        }
+
+        if (requestedQty > maxCanAdd) {
+            // add only what's available and inform the user
+            if (existing) {
+                existing.quantity = existingQty + maxCanAdd;
+            } else {
+                cart.push({
+                    productId: product.id,
+                    productName: product.ProductName || product.productName || 'Unnamed',
+                    price: Number(product.price) || 0,
+                    quantity: maxCanAdd,
+                    image: product.image || null
+                });
+            }
+            req.flash('error', `Only ${available} item(s) available for "${product.ProductName}". Added ${maxCanAdd} (maximum available).`);
+            return res.redirect('/cart');
+        }
+
+        // enough stock for requestedQty
         if (existing) {
-            existing.quantity = Number(existing.quantity) + qty;
+            existing.quantity = existingQty + requestedQty;
         } else {
             cart.push({
                 productId: product.id,
                 productName: product.ProductName || product.productName || 'Unnamed',
                 price: Number(product.price) || 0,
-                quantity: qty,
+                quantity: requestedQty,
                 image: product.image || null
             });
         }
@@ -55,39 +93,65 @@ function addToCart(req, res) {
     });
 }
 
+/**
+ * Update quantity in cart with stock checking.
+ * If requested quantity is 0 → remove item.
+ * If requested quantity exceeds available stock → set to available and notify user.
+ */
 function updateQuantity(req, res) {
     const productId = parseInt(req.params.id, 10);
-    let qty = parseInt(req.body.quantity, 10);
+    let requestedQty = parseInt(req.body.quantity, 10);
 
-    if (!productId || productId <= 0 || isNaN(qty)) {
+    if (!productId || productId <= 0 || isNaN(requestedQty)) {
         req.flash('error', 'Invalid request');
         return res.redirect('/cart');
     }
 
-    qty = Math.max(0, qty);
+    requestedQty = Math.max(0, requestedQty);
 
-    try {
+    // fetch latest product stock
+    productModel.getById(productId, function (err, product) {
+        if (err) {
+            req.flash('error', err.message || 'Database error while checking stock');
+            return res.redirect('/cart');
+        }
+        if (!product) {
+            req.flash('error', 'Product not found');
+            return res.redirect('/cart');
+        }
+
+        const available = Number(product.quantity) || 0;
         const cart = ensureCart(req);
         const idx = cart.findIndex(i => Number(i.productId) === productId);
+
         if (idx === -1) {
             req.flash('error', 'Item not found in cart');
             return res.redirect('/cart');
         }
 
-        if (qty === 0) {
+        if (requestedQty === 0) {
             cart.splice(idx, 1);
             req.flash('success', 'Item removed from cart');
-        } else {
-            cart[idx].quantity = qty;
-            req.flash('success', 'Quantity updated');
+            return res.redirect('/cart');
         }
+
+        if (requestedQty > available) {
+            // set to available
+            cart[idx].quantity = available;
+            req.flash('error', `Only ${available} item(s) available for "${product.ProductName}". Quantity adjusted to ${available}.`);
+            return res.redirect('/cart');
+        }
+
+        // OK to set requestedQty
+        cart[idx].quantity = requestedQty;
+        req.flash('success', 'Quantity updated');
         return res.redirect('/cart');
-    } catch (err) {
-        req.flash('error', err.message || 'Unable to update cart');
-        return res.redirect('/cart');
-    }
+    });
 }
 
+/**
+ * Remove a single product from cart by productId
+ */
 function removeFromCart(req, res) {
     const productId = parseInt(req.params.id, 10);
     if (!productId || productId <= 0) {
@@ -111,6 +175,9 @@ function removeFromCart(req, res) {
     }
 }
 
+/**
+ * Clear entire cart
+ */
 function clearCart(req, res) {
     try {
         req.session.cart = [];

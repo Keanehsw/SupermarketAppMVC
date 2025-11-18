@@ -43,6 +43,7 @@
         <% products.forEach(function(p) {
              const priceNum = Number(p.price) || 0;
              const imgPath = p.image ? ('/images/' + p.image) : '/images/placeholder.png';
+             const available = Number(p.quantity) || 0;
         %>
           <div class="col">
             <div class="card h-100 shadow-sm">
@@ -51,14 +52,18 @@
                 <h5 class="card-title">
                   <a href="/product/<%= p.id %>" class="text-decoration-none text-dark"><%= p.ProductName || '—' %></a>
                 </h5>
-                <p class="card-text mb-1"><small class="text-muted">Qty: <%= p.quantity != null ? p.quantity : '—' %></small></p>
+                <p class="card-text mb-1"><small class="text-muted">Qty available: <%= available %></small></p>
                 <p class="card-text fw-bold mb-3">$<%= priceNum.toFixed(2) %></p>
 
                 <div class="mt-auto">
-                  <form action="/add-to-cart/<%= p.id %>" method="POST" class="d-flex gap-2">
-                    <input type="number" name="quantity" min="1" value="1" class="form-control form-control-sm" style="width:80px;">
-                    <button type="submit" class="btn btn-sm btn-success">Add to Cart</button>
-                  </form>
+                  <% if (available <= 0) { %>
+                    <button class="btn btn-sm btn-secondary" disabled>Out of stock</button>
+                  <% } else { %>
+                    <form action="/add-to-cart/<%= p.id %>" method="POST" class="d-flex gap-2 align-items-center">
+                      <input type="number" name="quantity" min="1" max="<%= available %>" value="1" class="form-control form-control-sm" style="width:80px;">
+                      <button type="submit" class="btn btn-sm btn-success">Add to Cart</button>
+                    </form>
+                  <% } %>
                 </div>
               </div>
             </div>
@@ -69,4 +74,3 @@
   </div>
 </body>
 </html>
-<!-- ...existing code... -->
