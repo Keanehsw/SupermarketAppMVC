@@ -161,7 +161,7 @@ function getOrder(req, res) {
                 req.flash('error', err2.message || err2);
                 return res.redirect('/orders');
             }
-            return res.render('order', { order, items, user, messages: req.flash() });
+            return res.render('orders', { order, items, user, messages: req.flash() });
         });
     });
 }
