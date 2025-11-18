@@ -1,19 +1,23 @@
-// ...existing code...
 const express = require('express');
 const session = require('express-session');
 const flash = require('connect-flash');
 const multer = require('multer');
+const path = require('path');
 
 const productController = require('./controllers/productController');
 const userController = require('./controllers/userController');
 const cartController = require('./controllers/cartController');
+const orderController = require('./controllers/orderController');
 
+const cartModel = require('./models/cartitem');
 const db = require('./db');
+
 const app = express();
 
+// file upload setup (keeps existing behavior)
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'public/images');
+        cb(null, path.join(__dirname, 'public', 'images'));
     },
     filename: (req, file, cb) => {
         cb(null, Date.now() + '-' + file.originalname);
@@ -22,7 +26,8 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 app.set('view engine', 'ejs');
-app.use(express.static('public'));
+app.set('views', path.join(__dirname, 'views'));
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: false }));
 
 app.use(session({
@@ -33,31 +38,40 @@ app.use(session({
 }));
 app.use(flash());
 
+// authentication middleware - fixed: allow next() when logged in
 const checkAuthenticated = (req, res, next) => {
-    if (req.session.user) return next();
+    if (req.session && req.session.user) return next();
     req.flash('error', 'Please log in to view this resource');
     return res.redirect('/login');
 };
 const checkAdmin = (req, res, next) => {
-    if (req.session.user && req.session.user.role === 'admin') return next();
+    if (req.session && req.session.user && req.session.user.role === 'admin') return next();
     req.flash('error', 'Access denied');
     return res.redirect('/shopping');
 };
 
 // Routes
-app.get('/', (req, res) => res.render('index', { user: req.session.user }));
+app.get('/', (req, res) => res.render('index', { user: req.session.user, messages: req.flash() }));
 
 // product routes
 app.get('/inventory', checkAuthenticated, checkAdmin, productController.list);
 app.get('/shopping', checkAuthenticated, productController.list);
 app.get('/product/:id', checkAuthenticated, productController.getById);
-app.get('/addProduct', checkAuthenticated, checkAdmin, (req, res) => res.render('addProduct', { user: req.session.user }));
+app.get('/addProduct', checkAuthenticated, checkAdmin, (req, res) => res.render('addProduct', { user: req.session.user, messages: req.flash() }));
 app.post('/addProduct', checkAuthenticated, checkAdmin, upload.single('image'), productController.add);
 app.get('/updateProduct/:id', checkAuthenticated, checkAdmin, productController.renderEdit);
 app.post('/updateProduct/:id', checkAuthenticated, checkAdmin, upload.single('image'), productController.update);
 app.get('/deleteProduct/:id', checkAuthenticated, checkAdmin, productController.delete);
 
-// user registration / login (login kept in app.js)
+// user management (admin)
+app.get('/users', checkAuthenticated, checkAdmin, userController.list);
+app.get('/users/add', checkAuthenticated, checkAdmin, userController.renderAdd);
+app.post('/users/add', checkAuthenticated, checkAdmin, userController.add);
+app.get('/users/:id', checkAuthenticated, checkAdmin, userController.getById);
+app.post('/users/:id', checkAuthenticated, checkAdmin, userController.update);
+app.get('/users/delete/:id', checkAuthenticated, checkAdmin, userController.delete);
+
+// register / login
 app.get('/register', (req, res) => {
     res.render('register', { messages: req.flash('error'), formData: req.flash('formData')[0] });
 });
@@ -80,9 +94,24 @@ app.post('/login', (req, res) => {
         }
         if (results.length > 0) {
             req.session.user = results[0];
-            req.flash('success', 'Login successful!');
-            if (req.session.user.role === 'admin') return res.redirect('/inventory');
-            return res.redirect('/shopping');
+            // restore persisted cart for this user
+            cartModel.getByUserId(req.session.user.id, (cErr, items) => {
+                if (cErr) {
+                    console.error('Failed to load saved cart for user', req.session.user.id, cErr);
+                    req.session.cart = [];
+                } else {
+                    req.session.cart = (items || []).map(r => ({
+                        productId: r.productId,
+                        productName: r.productName,
+                        price: Number(r.price) || 0,
+                        quantity: Number(r.quantity) || 0,
+                        image: r.image
+                    }));
+                }
+                req.flash('success', 'Login successful!');
+                if (req.session.user.role === 'admin') return res.redirect('/inventory');
+                return res.redirect('/shopping');
+            });
         } else {
             req.flash('error', 'Invalid email or password.');
             return res.redirect('/login');
@@ -90,13 +119,19 @@ app.post('/login', (req, res) => {
     });
 });
 
-// admin user management routes
-app.get('/users', checkAuthenticated, checkAdmin, userController.list);
-app.get('/users/add', checkAuthenticated, checkAdmin, userController.renderAdd);
-app.post('/users/add', checkAuthenticated, checkAdmin, userController.add);
-app.get('/users/:id', checkAuthenticated, checkAdmin, userController.getById);
-app.post('/users/:id', checkAuthenticated, checkAdmin, userController.update);
-app.get('/users/delete/:id', checkAuthenticated, checkAdmin, userController.delete);
+// logout: persist cart then destroy
+app.get('/logout', (req, res) => {
+    const user = req.session.user;
+    const sessionCart = req.session.cart || [];
+    if (user && user.id) {
+        cartModel.saveCartForUser(user.id, sessionCart, function (err) {
+            if (err) console.error('Failed to save cart on logout for user', user.id, err);
+            req.session.destroy(() => res.redirect('/'));
+        });
+    } else {
+        req.session.destroy(() => res.redirect('/'));
+    }
+});
 
 // cart routes
 app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => cartController.addToCart(req, res));
@@ -105,12 +140,14 @@ app.post('/cart/update/:id', checkAuthenticated, (req, res) => cartController.up
 app.post('/cart/remove/:id', checkAuthenticated, (req, res) => cartController.removeFromCart(req, res));
 app.post('/cart/clear', checkAuthenticated, (req, res) => cartController.clearCart(req, res));
 
-// Logout
-app.get('/logout', (req, res) => {
-    req.session.destroy(() => res.redirect('/'));
-});
+// checkout & orders
+app.get('/checkout', checkAuthenticated, (req, res) => orderController.renderCheckout(req, res));
+app.post('/checkout', checkAuthenticated, (req, res) => orderController.placeOrder(req, res));
+app.get('/orders', checkAuthenticated, (req, res) => orderController.listOrders(req, res));
+app.get('/orders/:id', checkAuthenticated, (req, res) => orderController.getOrder(req, res));
+app.post('/orders/:id/status', checkAuthenticated, (req, res) => orderController.updateStatus(req, res));
+app.get('/orders/delete/:id', checkAuthenticated, (req, res) => orderController.deleteOrder(req, res));
 
-// start
+// start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-// ...existing code...

@@ -1,9 +1,22 @@
 // ...existing code...
 const productModel = require('../models/product');
+const cartModel = require('../models/cartitem');
 
 function ensureCart(req) {
     if (!req.session.cart) req.session.cart = [];
     return req.session.cart;
+}
+
+function persistIfLoggedIn(req, callback) {
+    if (req.session.user && req.session.user.id) {
+        // save current session cart to DB; swallow errors but log
+        cartModel.saveCartForUser(req.session.user.id, req.session.cart || [], function (err) {
+            if (err) console.error('Failed to persist cart for user', req.session.user.id, err);
+            if (typeof callback === 'function') callback(err);
+        });
+    } else if (typeof callback === 'function') {
+        callback(null);
+    }
 }
 
 /**
@@ -25,7 +38,7 @@ function viewCart(req, res) {
  */
 function addToCart(req, res) {
     const productId = parseInt(req.params.id, 10);
-    const requestedQty = Math.max(1, parseInt(req.body.quantity, 10) || 1);
+    const qty = Math.max(1, parseInt(req.body.quantity, 10) || 1);
 
     if (!productId || productId <= 0) {
         req.flash('error', 'Invalid product id');
@@ -58,7 +71,7 @@ function addToCart(req, res) {
             return res.redirect('/shopping');
         }
 
-        if (requestedQty > maxCanAdd) {
+        if (qty > maxCanAdd) {
             // add only what's available and inform the user
             if (existing) {
                 existing.quantity = existingQty + maxCanAdd;
@@ -72,24 +85,25 @@ function addToCart(req, res) {
                 });
             }
             req.flash('error', `Only ${available} item(s) available for "${product.ProductName}". Added ${maxCanAdd} (maximum available).`);
-            return res.redirect('/cart');
+            // persist then redirect
+            return persistIfLoggedIn(req, () => res.redirect('/cart'));
         }
 
         // enough stock for requestedQty
         if (existing) {
-            existing.quantity = existingQty + requestedQty;
+            existing.quantity = existingQty + qty;
         } else {
             cart.push({
                 productId: product.id,
                 productName: product.ProductName || product.productName || 'Unnamed',
                 price: Number(product.price) || 0,
-                quantity: requestedQty,
+                quantity: qty,
                 image: product.image || null
             });
         }
 
         req.flash('success', `${product.ProductName || 'Product'} added to cart`);
-        return res.redirect('/cart');
+        persistIfLoggedIn(req, () => res.redirect('/cart'));
     });
 }
 
@@ -132,20 +146,20 @@ function updateQuantity(req, res) {
         if (requestedQty === 0) {
             cart.splice(idx, 1);
             req.flash('success', 'Item removed from cart');
-            return res.redirect('/cart');
+            return persistIfLoggedIn(req, () => res.redirect('/cart'));
         }
 
         if (requestedQty > available) {
             // set to available
             cart[idx].quantity = available;
             req.flash('error', `Only ${available} item(s) available for "${product.ProductName}". Quantity adjusted to ${available}.`);
-            return res.redirect('/cart');
+            return persistIfLoggedIn(req, () => res.redirect('/cart'));
         }
 
         // OK to set requestedQty
         cart[idx].quantity = requestedQty;
         req.flash('success', 'Quantity updated');
-        return res.redirect('/cart');
+        persistIfLoggedIn(req, () => res.redirect('/cart'));
     });
 }
 
@@ -168,7 +182,7 @@ function removeFromCart(req, res) {
         }
         cart.splice(idx, 1);
         req.flash('success', 'Item removed from cart');
-        return res.redirect('/cart');
+        return persistIfLoggedIn(req, () => res.redirect('/cart'));
     } catch (err) {
         req.flash('error', err.message || 'Unable to remove item from cart');
         return res.redirect('/cart');
@@ -182,7 +196,8 @@ function clearCart(req, res) {
     try {
         req.session.cart = [];
         req.flash('success', 'Cart cleared');
-        return res.redirect('/cart');
+        // persist clear for logged-in user
+        return persistIfLoggedIn(req, () => res.redirect('/cart'));
     } catch (err) {
         req.flash('error', err.message || 'Unable to clear cart');
         return res.redirect('/cart');

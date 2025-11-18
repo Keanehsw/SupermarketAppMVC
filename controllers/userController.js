@@ -1,4 +1,3 @@
-// ...existing code...
 const userModel = require('../models/user');
 const crypto = require('crypto');
 
@@ -50,7 +49,6 @@ function add(req, res) {
         return res.redirect('/users/add');
     }
 
-    // hash password with SHA1 to match existing login scheme
     newUser.password = crypto.createHash('sha1').update(newUser.password).digest('hex');
 
     userModel.add(newUser, function (err) {
@@ -73,7 +71,6 @@ function update(req, res) {
     const updated = {
         username: (req.body.username || '').trim(),
         email: (req.body.email || '').trim(),
-        // only set password if provided
         password: req.body.password ? crypto.createHash('sha1').update(req.body.password).digest('hex') : undefined,
         address: req.body.address || null,
         contact: req.body.contact || null,
@@ -122,4 +119,3 @@ module.exports = {
     update,
     delete: remove
 };
-// ...existing code...
