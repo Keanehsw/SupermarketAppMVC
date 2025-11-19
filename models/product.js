@@ -23,10 +23,10 @@ function getAll(callback) {
 }
 
 /**
- * Create a new product
+ * Add (create) a new product
  * productObj: { ProductName, price, quantity, image }
  */
-function create(productObj, callback) {
+function add(productObj, callback) {
     const sql = 'INSERT INTO products (ProductName, price, quantity, image) VALUES (?, ?, ?, ?)';
     const params = [
         productObj.ProductName || null,
@@ -38,6 +38,13 @@ function create(productObj, callback) {
         if (err) return callback(err);
         return callback(null, { id: results.insertId });
     });
+}
+
+/**
+ * create() kept as alias for backwards compatibility
+ */
+function create(productObj, callback) {
+    return add(productObj, callback);
 }
 
 /**
@@ -86,6 +93,7 @@ function decrementStock(id, amount, callback) {
 module.exports = {
     getById,
     getAll,
+    add,
     create,
     update,
     delete: remove,
