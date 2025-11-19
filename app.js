@@ -109,8 +109,8 @@ app.post('/login', (req, res) => {
                     }));
                 }
                 req.flash('success', 'Login successful!');
-                if (req.session.user.role === 'admin') return res.redirect('/inventory');
-                return res.redirect('/shopping');
+                // Redirect both admins and users to the home page
+                return res.redirect('/');
             });
         } else {
             req.flash('error', 'Invalid email or password.');
@@ -147,6 +147,12 @@ app.get('/orders', checkAuthenticated, (req, res) => orderController.listOrders(
 app.get('/orders/:id', checkAuthenticated, (req, res) => orderController.getOrder(req, res));
 app.post('/orders/:id/status', checkAuthenticated, (req, res) => orderController.updateStatus(req, res));
 app.get('/orders/delete/:id', checkAuthenticated, (req, res) => orderController.deleteOrder(req, res));
+
+// New: logged-in user's order history
+app.get('/my-orders', checkAuthenticated, (req, res) => orderController.userOrderHistory(req, res));
+
+// New: admin view of a specific user's order history
+app.get('/users/:id/orders', checkAuthenticated, checkAdmin, (req, res) => orderController.viewUserOrders(req, res));
 
 // start server
 const PORT = process.env.PORT || 3000;
