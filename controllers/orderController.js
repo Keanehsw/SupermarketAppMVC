@@ -2,6 +2,7 @@ const orderModel = require('../models/order');
 const orderItemModel = require('../models/orderitem');
 const productModel = require('../models/product');
 const cartModel = require('../models/cartitem');
+const PDFDocument = require('pdfkit');
 
 /**
  * Render checkout page
@@ -231,6 +232,48 @@ function viewUserOrders(req, res) {
     });
 }
 
+function downloadInvoice(req, res) {
+    const orderId = parseInt(req.params.id, 10);
+    const user = req.session.user;
+    if (!orderId) return res.status(400).send("Invalid order id");
+    orderModel.getById(orderId, (err, order) => {
+        if (err || !order) return res.status(404).send("Order not found");
+        // Security: only admin or owner can download
+        if (user.role !== 'admin' && order.user_id !== user.id) {
+            return res.status(403).send("Access denied");
+        }
+        orderItemModel.getByOrderId(orderId, (err2, items) => {
+            if (err2) return res.status(500).send("Order items fetch failed");
+
+            // Setup PDF
+            const doc = new PDFDocument({ margin: 50 });
+            res.setHeader('Content-disposition', `attachment; filename="invoice_${orderId}.pdf"`);
+            res.setHeader('Content-type', 'application/pdf');
+            doc.pipe(res);
+
+            // Invoice header
+            doc.fontSize(18).text(`Invoice for Order #${orderId}`, { align: 'center' });
+            doc.moveDown();
+            doc.fontSize(12)
+                .text(`Reference: ${order.reference || '-'}`)
+                .text(`Placed: ${order.created_at}`)
+                .text(`Status: ${order.status}`)
+                .text(`Total: $${Number(order.total).toFixed(2)}`);
+            doc.moveDown();
+
+            // Items table
+            doc.fontSize(13).text('Items:');
+            items.forEach((it, idx) => {
+                doc.fontSize(12)
+                    .text(`${idx + 1}. ${it.ProductName || ('Product ' + it.product_id)} — Qty: ${it.quantity} @ $${Number(it.price).toFixed(2)} Subtotal: $${(Number(it.price) * Number(it.quantity)).toFixed(2)}`);
+            });
+
+            doc.moveDown().fontSize(10).text('Thank you for your order!');
+            doc.end();
+        });
+    });
+}
+
 module.exports = {
     renderCheckout,
     placeOrder,
@@ -239,5 +282,6 @@ module.exports = {
     updateStatus,
     deleteOrder,
     userOrderHistory,
-    viewUserOrders
+    viewUserOrders,
+    downloadInvoice
 };

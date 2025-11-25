@@ -1,26 +1,68 @@
 <!DOCTYPE html>
-<html>
-<head><title>Add Product</title></head>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <title>Add Product</title>
+</head>
 <body>
-  <h2>Add Product</h2>
-  <form action="/addProduct" method="POST" enctype="multipart/form-data">
-    <div>
-      <label>Product Name</label>
-      <input type="text" name="ProductName" required>
+
+  <!-- Admin Navbar -->
+  <%- include('partials/navbar') %>
+
+  <div class="container mt-5">
+
+    <!-- Title + Button -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2 class="mb-0">Add Product</h2>
+
+      <!-- Add Product Button -->
+      <a href="/inventory" class="btn btn-success">
+        Back to Inventory
+      </a>
     </div>
-    <div>
-      <label>Quantity</label>
-      <input type="number" name="quantity" min="0" value="0">
-    </div>
-    <div>
-      <label>Price</label>
-      <input type="number" step="0.01" name="price" value="0.00">
-    </div>
-    <div>
-      <label>Image</label>
-      <input type="file" name="image" accept="image/*">
-    </div>
-    <button type="submit">Add</button>
-  </form>
+
+    <!-- Error Messages -->
+    <% if (messages && messages.length > 0) { %>
+      <div class="alert alert-danger">
+        <% messages.forEach(function(m) { %>
+          <p class="mb-0"><%= m %></p>
+        <% }); %>
+      </div>
+    <% } %>
+
+    <!-- Add Product Form -->
+    <form action="/addProduct" method="POST" enctype="multipart/form-data" class="mt-3">
+
+      <div class="mb-3">
+        <label for="productName" class="form-label">Product Name</label>
+        <input type="text" class="form-control" id="productName" name="ProductName" required>
+      </div>
+
+      <div class="mb-3">
+        <label for="quantity" class="form-label">Quantity</label>
+        <input type="number" class="form-control" id="quantity" name="quantity" min="0" value="0">
+      </div>
+
+      <div class="mb-3">
+        <label for="price" class="form-label">Price</label>
+        <input type="number" step="0.01" class="form-control" id="price" name="price" value="0.00">
+      </div>
+
+      <div class="mb-3">
+        <label for="image" class="form-label">Image</label>
+        <input type="file" class="form-control" id="image" name="image" accept="image/*">
+      </div>
+
+      <button type="submit" class="btn btn-primary">
+        Save Product
+      </button>
+
+    </form>
+
+  </div>
+
 </body>
 </html>

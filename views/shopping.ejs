@@ -8,6 +8,7 @@
   <title>Shop - Supermarket App</title>
 </head>
 <body>
+  <!-- Navbar -->
   <nav class="navbar navbar-expand-sm bg-dark navbar-dark">
     <div class="container-fluid">
       <a class="navbar-brand" href="/">Supermarket App</a>
@@ -19,20 +20,28 @@
           <% if (user && user.role === 'admin') { %>
             <li class="nav-item"><a class="nav-link" href="/users">Users</a></li>
             <li class="nav-item"><a class="nav-link" href="/inventory">Inventory</a></li>
-          <% } else { %>
+          <% } else if (user) { %>
             <li class="nav-item"><a class="nav-link" href="/cart">Cart</a></li>
+          <% } else { %>
+            <li class="nav-item"><a class="nav-link" href="/login">Login</a></li>
+            <li class="nav-item"><a class="nav-link" href="/register">Register</a></li>
           <% } %>
-          <li class="nav-item"><a class="nav-link" href="/logout">Logout</a></li>
+          <% if (user) { %>
+            <li class="nav-item"><a class="nav-link" href="/logout">Logout</a></li>
+          <% } %>
         </ul>
       </div>
     </div>
   </nav>
 
+  <!-- Main content -->
   <div class="container my-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h2 class="mb-0">Shop</h2>
       <div>
-        <small class="text-muted">Signed in as <strong><%= user ? user.username : 'Guest' %></strong></small>
+        <% if (user) { %>
+          <small class="text-muted">Signed in as <strong><%= user.username %></strong></small>
+        <% } %>
       </div>
     </div>
 
@@ -58,7 +67,7 @@
                 <div class="mt-auto">
                   <% if (available <= 0) { %>
                     <button class="btn btn-sm btn-secondary" disabled>Out of stock</button>
-                  <% } else { %>
+                  <% } else if (user && user.role !== 'admin') { %>
                     <form action="/add-to-cart/<%= p.id %>" method="POST" class="d-flex gap-2 align-items-center">
                       <input type="number" name="quantity" min="1" max="<%= available %>" value="1" class="form-control form-control-sm" style="width:80px;">
                       <button type="submit" class="btn btn-sm btn-success">Add to Cart</button>

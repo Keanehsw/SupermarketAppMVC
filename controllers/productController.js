@@ -1,17 +1,26 @@
-// ...existing code...
 const productModel = require('../models/product');
 
 function list(req, res) {
     productModel.getAll(function (err, products) {
+        const user = req.session.user || null;
+
         if (err) {
             req.flash('error', err.message || err);
             return res.status(500).redirect('/');
         }
-        const user = req.session.user || null;
+
         if (user && user.role === 'admin') {
-            return res.render('inventory', { products, user });
+            return res.render('inventory', { 
+                products, 
+                user, 
+                messages: req.flash('error') || [] 
+            });
         } else {
-            return res.render('shopping', { products, user });
+            return res.render('shopping', { 
+                products, 
+                user, 
+                messages: req.flash('error') || [] 
+            });
         }
     });
 }
@@ -23,11 +32,17 @@ function getById(req, res) {
             req.flash('error', err.message || err);
             return res.status(500).redirect('/');
         }
+
         if (!product) {
             req.flash('error', 'Product not found');
             return res.redirect('/shopping');
         }
-        res.render('product', { product, user: req.session.user });
+
+        res.render('product', { 
+            product, 
+            user: req.session.user, 
+            messages: req.flash('error') || [] 
+        });
     });
 }
 
@@ -36,13 +51,20 @@ function renderEdit(req, res) {
     productModel.getById(id, function (err, product) {
         if (err) {
             req.flash('error', err.message || err);
-            return res.status(500).redirect('/inventory');
+            return res.redirect('/inventory');
         }
+
         if (!product) {
             req.flash('error', 'Product not found');
             return res.redirect('/inventory');
         }
-        res.render('updateProduct', { product, user: req.session.user });
+
+        res.render('updateProduct', { 
+            product, 
+            user: req.session.user,
+            messages: req.flash('error') || [],
+            success: req.flash('success') || []
+        });
     });
 }
 
@@ -55,7 +77,7 @@ function add(req, res) {
     };
 
     if (!product.ProductName) {
-        req.flash('error', 'ProductName is required');
+        req.flash('error', 'Product Name is required');
         return res.redirect('/addProduct');
     }
 
@@ -64,6 +86,8 @@ function add(req, res) {
             req.flash('error', err.message || err);
             return res.redirect('/addProduct');
         }
+
+        req.flash('success', 'Product added successfully!');
         res.redirect('/inventory');
     });
 }
@@ -74,7 +98,7 @@ function update(req, res) {
     if (req.file) image = req.file.filename;
 
     const product = {
-        ProductName: req.body.ProductName || req.body.name,
+        ProductName: req.body.ProductName,
         quantity: req.body.quantity,
         price: req.body.price,
         image: image
@@ -83,12 +107,15 @@ function update(req, res) {
     productModel.update(id, product, function (err, result) {
         if (err) {
             req.flash('error', err.message || err);
-            return res.redirect('/inventory');
+            return res.redirect('/updateProduct/' + id);
         }
+
         if (!result || result.affectedRows === 0) {
             req.flash('error', 'Product not found or not changed');
-            return res.redirect('/inventory');
+            return res.redirect('/updateProduct/' + id);
         }
+
+        req.flash('success', 'Product updated successfully!');
         res.redirect('/inventory');
     });
 }
@@ -100,15 +127,17 @@ function remove(req, res) {
             req.flash('error', err.message || err);
             return res.redirect('/inventory');
         }
+
         if (!result || result.affectedRows === 0) {
             req.flash('error', 'Product not found');
             return res.redirect('/inventory');
         }
+
+        req.flash('success', 'Product deleted successfully!');
         res.redirect('/inventory');
     });
 }
 
-// export both names to avoid accidental undefined when calling productController.delete
 module.exports = {
     list,
     getById,
@@ -118,4 +147,3 @@ module.exports = {
     delete: remove,
     remove
 };
-// ...existing code...

@@ -154,6 +154,9 @@ app.get('/my-orders', checkAuthenticated, (req, res) => orderController.userOrde
 // New: admin view of a specific user's order history
 app.get('/users/:id/orders', checkAuthenticated, checkAdmin, (req, res) => orderController.viewUserOrders(req, res));
 
+// New: download invoice
+app.get('/orders/:id/invoice', checkAuthenticated, (req, res) => orderController.downloadInvoice(req, res));
+
 // start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
